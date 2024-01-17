@@ -2,6 +2,7 @@
 # generate_ga_code
 #
 # Modified version that doesn't rely on Google API to create QR Code
+# Code to Generate QRCode by @davidshimjs, see: https://github.com/davidshimjs/qrcodejs
 
 when HTTP_REQUEST {
   set account [URI::query [HTTP::uri] "account"]
