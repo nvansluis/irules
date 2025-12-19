@@ -4,8 +4,8 @@ when CLIENT_DATA {
     #+ Configuration of this iRule.
     #
     
-    set PassiveDNSLearningFeeder(resolver)      "/Common/dns_resolver"  ;# Resolver to use.
-    set PassiveDNSLearningFeeder(cache_timeout) 60                      ;# Cache timeout in seconds.
+    set PassiveDNSLearningFeeder(resolver)      "/PROD/dns_resolver"  ;# Resolver to use.
+    set PassiveDNSLearningFeeder(cache_timeout) 600                   ;# Cache timeout in seconds.
     
     #
     # Configuration of this iRule.
@@ -20,6 +20,18 @@ when CLIENT_DATA {
     #log "Discontinue iRule processing if log type isn't of type infoblox-responses."
     
     if { not([scan [UDP::payload] {%*[^]]%*[^:]: %[^:]%*[^#]%*[^y]y: %s} type fqdn] == 2 && $type == "infoblox-responses") } {
+        UDP::drop
+        return
+    }
+    
+    #log "Drop UDP packet since it's no longer needed"
+    
+    UDP::drop
+    
+    #log "Discontinue iRule processing if request is PTR-record."
+    
+    set lc_fqdn [string tolower $fqdn]
+    if { $lc_fqdn ends_with ".arpa" } {
         return
     }
     
@@ -33,20 +45,38 @@ when CLIENT_DATA {
     
     #log "Discontinue iRule processing if FQDN is found in cache."
     
-    if { [table lookup -notouch -subtable fqdn_cache $fqdn] != "" } {
+    if { [table lookup -notouch -subtable fqdn_cache $lc_fqdn] != "" } {
         return
     }
     
     #log "Perform DNS lookup."
     
-    RESOLVER::name_lookup $PassiveDNSLearningFeeder(resolver) $fqdn a
+    RESOLVER::name_lookup $PassiveDNSLearningFeeder(resolver) $lc_fqdn a
     
-    #log "Cache FQDN for 60 seconds."
+    #log "Cache FQDN $lc_fqdn for 600 seconds."
     
-    table set -subtable fqdn_cache $fqdn 1 $PassiveDNSLearningFeeder(cache_timeout)
+    table set -subtable fqdn_cache $lc_fqdn 1 $PassiveDNSLearningFeeder(cache_timeout)
 
     #
     # Handler to perform DNS lookup if not cached.
+    ############################################################################
+    
+    ############################################################################
+    #+ Handler to report on entries in cache.
+    #
+    
+    #log "Discontinue iRule processing if last report was done less than 1 minute ago."
+    
+    if { [table lookup -notouch -subtable "report" "report"] != "" } {
+        return
+    }
+    
+    table set -subtable "report" "report" 1 60
+    
+    log "fqdn_cache table holds [table keys -subtable fqdn_cache -count] entries."
+    
+    #
+    # Handler to report on entries in cache.
     ############################################################################
     
 }
